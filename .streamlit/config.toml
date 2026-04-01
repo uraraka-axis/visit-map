@@ -1,0 +1,12 @@
+[theme]
+base = "light"
+
+[[pages]]
+path = "streamlit_app.py"
+name = "マップ一覧"
+icon = "📍"
+
+[[pages]]
+path = "pages/01_データインポート.py"
+name = "データインポート"
+icon = "📤"
