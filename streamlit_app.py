@@ -218,28 +218,19 @@ def main_content():
     with col_map:
         geo_df = df.dropna(subset=["lat", "lng"])
 
-        # 施設選択時はその施設を中心に、未選択時は全体表示
-        if st.session_state.selected_hotel:
-            selected_row = df[df["name"] == st.session_state.selected_hotel]
-            if (not selected_row.empty
-                    and pd.notna(selected_row.iloc[0].get("lat"))
-                    and pd.notna(selected_row.iloc[0].get("lng"))):
-                center = [selected_row.iloc[0]["lat"], selected_row.iloc[0]["lng"]]
-                zoom = 15
-            elif not geo_df.empty:
-                center = [geo_df["lat"].mean(), geo_df["lng"].mean()]
-                zoom = 14
+        # 中心・ズームはエリア単位で初回のみ確定（選択で動かさない）
+        view_key = f"map_view_{selected_area}"
+        if view_key not in st.session_state:
+            if not geo_df.empty:
+                st.session_state[view_key] = {
+                    "center": [geo_df["lat"].mean(), geo_df["lng"].mean()],
+                    "zoom": 14,
+                }
             else:
-                center = [35.1, 139.07]
-                zoom = 13
-        elif not geo_df.empty:
-            center = [geo_df["lat"].mean(), geo_df["lng"].mean()]
-            zoom = 14
-        else:
-            center = [35.1, 139.07]
-            zoom = 14
+                st.session_state[view_key] = {"center": [35.1, 139.07], "zoom": 14}
 
-        m = folium.Map(location=center, zoom_start=zoom, tiles="CartoDB Voyager")
+        view = st.session_state[view_key]
+        m = folium.Map(location=view["center"], zoom_start=view["zoom"], tiles="CartoDB Voyager")
 
         for _, row in geo_df.iterrows():
             conf = STATUS_CONFIG.get(row["status"], STATUS_CONFIG["未訪問"])
@@ -259,32 +250,32 @@ def main_content():
             )
             popup_html = "<br>".join(popup_lines)
 
-            is_selected = (row["name"] == st.session_state.selected_hotel)
-            size = 18 if is_selected else 14
-            border = 3 if is_selected else 2
             dot_html = (
                 f'<div style="'
-                f'width:{size}px;height:{size}px;'
+                f'width:14px;height:14px;'
                 f'border-radius:50%;'
                 f'background:{conf["color"]};'
-                f'border:{border}px solid #fff;'
+                f'border:2px solid #fff;'
                 f'box-shadow:0 1px 4px rgba(0,0,0,0.3);'
                 f'"></div>'
             )
             icon = folium.DivIcon(
                 html=dot_html,
-                icon_size=(size, size),
-                icon_anchor=(size // 2, size // 2),
+                icon_size=(14, 14),
+                icon_anchor=(7, 7),
             )
             folium.Marker(
                 location=[row["lat"], row["lng"]],
-                popup=folium.Popup(popup_html, max_width=280, show=is_selected),
+                popup=folium.Popup(popup_html, max_width=280),
                 tooltip=row["name"],
                 icon=icon,
             ).add_to(m)
 
-        map_result = st_folium(m, width=None, height=700,
-                               returned_objects=["last_object_clicked", "last_object_clicked_tooltip"])
+        map_result = st_folium(
+            m, width=None, height=700,
+            returned_objects=["last_object_clicked", "last_object_clicked_tooltip"],
+            key=f"main_map_{selected_area}",
+        )
 
         clicked_name = None
         if map_result:
@@ -305,7 +296,7 @@ def main_content():
         if clicked_name and clicked_name != st.session_state.selected_hotel:
             st.session_state.selected_hotel = clicked_name
             st.session_state.hotel_select = clicked_name
-            st.rerun(scope="fragment")
+            # 手動 rerun は不要（st_folium の戻り値変化で fragment が自然に再実行される）
 
     # --- 施設選択・編集 ---
     with col_edit:
